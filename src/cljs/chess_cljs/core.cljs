@@ -502,9 +502,32 @@
             (range 8))))
       (reverse (range 8)))))
 
+(defn print-row [row] 
+  (let [res 
+    (reduce 
+      (fn [[acc prev] x]
+        (let [piece (if (:piece x) (name (:piece x)) nil)]
+        (if 
+          (nil? piece) 
+          [acc (inc prev)] 
+          [(if (> prev 0) 
+            (str acc prev piece) 
+            (str acc piece)) 0])))
+      ["" 0]
+      row)] 
+    (str (first res) (when (> (last res) 0) (last res)))))
+
+(defn board-to-fen [board]
+  (str
+    (str/join "/" 
+      (map 
+        print-row
+        board))
+    " w KQkq - 0 1"))
+
 (defonce app-state 
   (atom {:text "Hello Chestnut!"
-         :board (position-to-array cbpos)}))
+         :board (position-to-array start-position)}))
 
 (defn square-color [arg]
   (let [colors ["#B58863" "#F0D9B5"]
@@ -520,7 +543,7 @@
         #js {:className "square" 
              :style #js {:float "left" 
                          :position "relative" 
-                         :background-color (square-color data)
+                         :backgroundColor (square-color data)
                          :width 49 
                          :height 49}}
         (when (:piece data) (dom/img #js {:src (str "img/" (name (:piece data)) ".svg")
@@ -533,17 +556,29 @@
       (dom/div #js {:className "row"} 
         (apply dom/div nil (om/build-all square-view data))))))
 
+(defn handle-change [data owner]
+  (let [board (-> (om/get-node owner "fen")
+                      .-value
+                      parse-fen
+                      (get :position)
+                      position-to-array)]
+    (println (board-to-fen board))
+    (om/update! data :board board)))
+
 (defn board-view [data owner]
   (reify
-    om/IRender
-    (render [this]
+    om/IRenderState
+    (render-state [this state]
       (dom/div #js {:className "board" 
                     :style #js {:width "392px"
                                 :height "392px"
                                 :float "left"
                                 :border "2px solid #000000" 
                                 :boxSizing "content-box"}}
-        (apply dom/div nil (om/build-all row-view (:board data)))))))
+        (apply dom/div nil (om/build-all row-view (:board data)))
+        (dom/input
+          #js {:type "text" :ref "fen" :value (board-to-fen (:board data))
+               :onChange (fn [event] (handle-change data owner))})))))
 
 (defn main []
   (om/root board-view app-state
