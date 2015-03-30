@@ -529,25 +529,37 @@
   (atom {:text "Hello Chestnut!"
          :board (position-to-array start-position)}))
 
-(defn square-color [arg]
-  (let [colors ["#B58863" "#F0D9B5"]
-        row (:row arg)
-        col (:col arg)]
+(defn square-color [parity highlight]
+  (let [colors (if highlight ["#0000FF", "#0000FF"] ["#B58863" "#F0D9B5"])
+        row (:row parity)
+        col (:col parity)]
     (get colors (mod (+ row col) 2))))
+
+(defn square-class [data]
+  (let [classes (if (:over data) ["light-square-highlight", "dark-square-highlight"] ["light-square", "dark-square"])
+        row (:row data)
+        col (:col data)]
+    (get classes (mod (+ row col) 2))))
 
 (defn square-view [data owner]
   (reify
     om/IRender
     (render [this]
       (dom/div 
-        #js {:className "square" 
-             :style #js {:float "left" 
-                         :position "relative" 
-                         :backgroundColor (square-color data)
+        #js {:className (square-class data) 
+             :style #js {
                          :width 49 
-                         :height 49}}
-        (when (:piece data) (dom/img #js {:src (str "img/" (name (:piece data)) ".svg")
-                                          :style #js {:width "49px" :height "49px"}}))))))
+                         :height 49}
+            :onMouseOver (fn [event] 
+                           (om/update! data :over true))
+            :onMouseOut (fn [event] 
+                          (om/update! data :over false))
+            }
+        (when (:piece data) 
+          (dom/img 
+            #js {:src (str "img/" (name (:piece data)) ".svg")
+                 :style #js {:width "49px" :height "49px"}
+		}))))))
 
 (defn row-view [data owner]
   (reify
