@@ -105,10 +105,10 @@
       piece)))
 
 (defn white? [piece] 
-  (contains? #{ "white" \K \Q \R \B \N \P } piece))
+  (contains? #{ "white" \K \Q \R \B \N \P "w" } piece))
 
 (defn black? [piece] 
-  (contains? #{ "blacK" \k \q \r \b \n \p } piece))
+  (contains? #{ "blacK" \k \q \r \b \n \p "b" } piece))
 
 (defn is-king? [piece] 
   (contains? #{ \K \k } piece ))
@@ -527,7 +527,10 @@
 
 (defonce app-state 
   (atom {:text "Hello Chestnut!"
-         :board (position-to-array start-position)}))
+	 :move-input ""
+         :fen start-fen
+;         :board (position-to-array start-position)
+	}))
 
 (defn square-color [parity highlight]
   (let [colors (if highlight ["#0000FF", "#0000FF"] ["#B58863" "#F0D9B5"])
@@ -550,10 +553,10 @@
              :style #js {
                          :width 49 
                          :height 49}
-            :onMouseOver (fn [event] 
-                           (om/update! data :over true))
-            :onMouseOut (fn [event] 
-                          (om/update! data :over false))
+;            :onMouseOver (fn [event] 
+;                           (om/update! data :over true))
+;            :onMouseOut (fn [event] 
+;                          (om/update! data :over false))
             }
         (when (:piece data) 
           (dom/img 
@@ -574,23 +577,59 @@
                       parse-fen
                       (get :position)
                       position-to-array)]
-    (println (board-to-fen board))
     (om/update! data :board board)))
+
+(defn legal-move-view [data owner]
+  (reify
+    om/IRender
+    (render [this]
+      (println data)
+      (dom/li nil (str data)))))
+
+(defn handle-move-input-change [e owner {:keys [text]}]
+  (om/set-state! owner :move-input (.. e -target -value)))
+
+(defn parse-move [move]
+  (str/split (str move) "-"))
+
+(defn make-move [data owner]
+  (let [move (-> (om/get-node owner "move-input")
+                        .-value
+                        parse-move)]
+    (when move
+      (println move)
+      ;(om/transact! data :contacts #(conj % new-contact))
+      ;(om/set-state! owner :text "")
+    )))
 
 (defn board-view [data owner]
   (reify
     om/IRenderState
     (render-state [this state]
+      (let [position-array (position-to-array (:position (parse-fen (:fen data))))]
       (dom/div #js {:className "board" 
                     :style #js {:width "392px"
                                 :height "392px"
                                 :float "left"
                                 :border "2px solid #000000" 
                                 :boxSizing "content-box"}}
-        (apply dom/div nil (om/build-all row-view (:board data)))
-        (dom/input
-          #js {:type "text" :ref "fen" :value (board-to-fen (:board data))
-               :onChange (fn [event] (handle-change data owner))})))))
+        (apply dom/div nil (om/build-all row-view position-array))
+	(dom/div nil
+          (dom/input #js {:type "text" :ref "move-input" :value (:move-input state) :onChange #(handle-move-input-change % owner state)})
+	  (dom/button #js {:onClick #(make-move data owner)} "Move")
+	)
+;	(println state)
+;	(println data)
+;  	(println (type (:fen data)))
+        (dom/div nil (:fen data))
+	(let [current-moves (map #(str (first %) "-" (last %)) (moves (:position (parse-fen (:fen data))) "white"))]
+;	(let [current-moves (moves (:position (parse-fen (:fen data))) (:active-color (parse-fen (:fen data))))]
+	(println current-moves)
+        (apply dom/ul nil (om/build-all legal-move-view current-moves))
+          ;#js {:type "text" :ref "fen" :value (:fen data)
+               ;:onChange (fn [event] (handle-change data owner))
+;	      }
+))))))
 
 (defn main []
   (om/root board-view app-state
