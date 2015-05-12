@@ -40,10 +40,20 @@
       parse-row
       (reverse (str/split position-str #"/")))))
 
+(defn parse-color [active-color-str]
+  (or 
+    (when (= active-color-str "w") "white")
+    (when (= active-color-str "b") "black")))
+
+(defn print-color [color]
+  (or 
+    (when (= color "white") "w")
+    (when (= color "black") "b")))
+
 (defn parse-fen [fen-str]
   (let [fen-split (str/split fen-str #" ")]
     {:position (parse-position (nth fen-split 0))
-     :active-color (nth fen-split 1)
+     :active-color (parse-color (nth fen-split 1))
      :castling (nth fen-split 2)
      :en-passant (nth fen-split 3)
      :halfmove-clock (nth fen-split 4)
@@ -522,8 +532,10 @@
     (str/join "/" 
       (map 
         print-row
-        board))
-    " w KQkq - 0 1"))
+        (position-to-array (:position board))))
+    " "
+    (print-color (:active-color board))
+    " KQkq - 0 1"))
 
 (defonce app-state 
   (atom {:text "Hello Chestnut!"
@@ -583,7 +595,7 @@
   (reify
     om/IRender
     (render [this]
-      (println data)
+;      (println data)
       (dom/li nil (str data)))))
 
 (defn handle-move-input-change [e owner {:keys [text]}]
@@ -597,9 +609,17 @@
                         .-value
                         parse-move)]
     (when move
-      (println move)
-      ;(om/transact! data :contacts #(conj % new-contact))
-      ;(om/set-state! owner :text "")
+;      (println data)
+;      (println move)
+      (let [board (parse-fen (:fen data))
+            legal-moves (set (moves (:position board) (:active-color board)))]
+        (if 
+          (contains? legal-moves move)
+          (let [new-fen (board-to-fen (assoc board :position (move-with-effects (:position board) move) :active-color (switch-color (:active-color board))))]
+            (om/update! data :fen new-fen))
+          (print "Illegal move " move)))
+;        (om/set-state! owner :move-input ""))
+;        (println new-fen))
     )))
 
 (defn board-view [data owner]
@@ -607,29 +627,21 @@
     om/IRenderState
     (render-state [this state]
       (let [position-array (position-to-array (:position (parse-fen (:fen data))))]
-      (dom/div #js {:className "board" 
-                    :style #js {:width "392px"
-                                :height "392px"
-                                :float "left"
-                                :border "2px solid #000000" 
-                                :boxSizing "content-box"}}
-        (apply dom/div nil (om/build-all row-view position-array))
-	(dom/div nil
-          (dom/input #js {:type "text" :ref "move-input" :value (:move-input state) :onChange #(handle-move-input-change % owner state)})
-	  (dom/button #js {:onClick #(make-move data owner)} "Move")
-	)
-;	(println state)
-;	(println data)
-;  	(println (type (:fen data)))
-        (dom/div nil (:fen data))
-	(let [current-moves (map #(str (first %) "-" (last %)) (moves (:position (parse-fen (:fen data))) "white"))]
-;	(let [current-moves (moves (:position (parse-fen (:fen data))) (:active-color (parse-fen (:fen data))))]
-	(println current-moves)
-        (apply dom/ul nil (om/build-all legal-move-view current-moves))
-          ;#js {:type "text" :ref "fen" :value (:fen data)
-               ;:onChange (fn [event] (handle-change data owner))
-;	      }
-))))))
+	(println (parse-fen (:fen data)))
+        (dom/div #js {:className "board" 
+                      :style #js {:width "392px"
+                                  :height "392px"
+                                  :float "left"
+                                  :border "2px solid #000000" 
+                                  :boxSizing "content-box"}}
+          (apply dom/div nil (om/build-all row-view position-array))
+	  (dom/div nil
+            (dom/input #js {:type "text" :ref "move-input" :value (:move-input state) :onChange #(handle-move-input-change % owner state)})
+	    (dom/button #js {:onClick #(make-move data owner)} "Move"))
+          (dom/div nil (:fen data))
+          (dom/div nil (board-to-fen (parse-fen (:fen data))))
+          (let [parsed-fen (parse-fen (:fen data)) current-moves (map #(str (first %) "-" (last %)) (moves (:position parsed-fen) (:active-color parsed-fen)))]
+            (apply dom/ul nil (om/build-all legal-move-view current-moves))))))))
 
 (defn main []
   (om/root board-view app-state
