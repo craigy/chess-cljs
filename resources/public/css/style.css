@@ -18,7 +18,7 @@ h1 {
   height: 49;
 }
 
-.light-square-highlight {
+.light-square-hover {
   position: relative;
   float: left;
   background-color: #F0D9FF;
@@ -26,10 +26,26 @@ h1 {
   height: 49;
 }
 
-.dark-square-highlight {
+.dark-square-hover {
   position: relative;
   float: left;
   background-color: #B588FF;
+  width: 49;
+  height: 49;
+}
+
+.light-square-highlight {
+  position: relative;
+  float: left;
+  background-color: #0000FF;
+  width: 49;
+  height: 49;
+}
+
+.dark-square-highlight {
+  position: relative;
+  float: left;
+  background-color: #0000FF;
   width: 49;
   height: 49;
 }

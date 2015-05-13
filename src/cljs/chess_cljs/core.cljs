@@ -540,41 +540,80 @@
 (defonce app-state 
   (atom {:text "Hello Chestnut!"
 	 :move-input ""
-         :fen start-fen
-;         :board (position-to-array start-position)
-	}))
+         :fen start-fen }))
 
-(defn square-color [parity highlight]
-  (let [colors (if highlight ["#0000FF", "#0000FF"] ["#B58863" "#F0D9B5"])
-        row (:row parity)
-        col (:col parity)]
-    (get colors (mod (+ row col) 2))))
+;(defn square-color [parity highlight]
+;  (let [colors (if highlight 
+;                 ["#0000FF", "#0000FF"] 
+;                 ["#B58863" "#F0D9B5"])
+;        row (:row parity)
+;        col (:col parity)]
+;    (get colors (mod (+ row col) 2))))
 
-(defn square-class [data]
-  (let [classes (if (:over data) ["light-square-highlight", "dark-square-highlight"] ["light-square", "dark-square"])
+(defn square-class [data cursor]
+  (let [over (:over cursor) 
+        select (:selected cursor) 
         row (:row data)
-        col (:col data)]
+        col (:col data)
+        selected (and select (= row (first select)) (= col (last select)))
+        highlight (and over (= row (first over)) (= col (last over)))
+        classes (cond 
+                  selected ["light-square-highlight", "dark-square-highlight"] 
+                  highlight ["light-square-hover", "dark-square-hover"] 
+                  :else ["light-square", "dark-square"])]
     (get classes (mod (+ row col) 2))))
+
+(defn parse-move [move]
+  (str/split (str move) "-"))
+
+(defn make-move [move cursor]
+  (when move
+    (let [board (parse-fen (:fen cursor))
+          legal-moves (set (moves (:position board) (:active-color board)))]
+      (if 
+        (contains? legal-moves move)
+        (let [new-fen (board-to-fen (assoc board :position (move-with-effects (:position board) move) :active-color (switch-color (:active-color board))))]
+          (om/update! cursor :fen new-fen))
+        (print "Illegal move " move)))))
+
+(defn make-move-button [data owner]
+  (let [move (-> (om/get-node owner "move-input")
+                        .-value
+                        parse-move)]
+    (make-move move data)))
+
+(defn handle-square-click [data owner cursor]
+  (let [previous (:selected cursor)
+        current [(:row data) (:col data)]]
+    (if previous
+      (do 
+;        (println "moving from " previous " to " current)
+;        (println "moving from " (named-square previous) " to " (named-square current))
+        (make-move [(named-square previous) (named-square current)] cursor)
+        (om/update! cursor :selected nil))
+      (do
+;        (println "setting selected to " current)
+;        (println "setting selected to " (named-square current))
+        (om/update! cursor :selected current)))
+    (om/refresh! owner)))
 
 (defn square-view [data owner]
   (reify
-    om/IRender
-    (render [this]
-      (dom/div 
-        #js {:className (square-class data) 
-             :style #js {
-                         :width 49 
-                         :height 49}
-;            :onMouseOver (fn [event] 
-;                           (om/update! data :over true))
-;            :onMouseOut (fn [event] 
-;                          (om/update! data :over false))
-            }
-        (when (:piece data) 
-          (dom/img 
-            #js {:src (str "img/" (name (:piece data)) ".svg")
-                 :style #js {:width "49px" :height "49px"}
-		}))))))
+    om/IRenderState
+    (render-state [this state]
+      (let [cursor (om/root-cursor app-state)]
+        (dom/div 
+          #js {:className (square-class data cursor) 
+               :style #js { :width 49 :height 49 }
+               :onMouseOver (fn [event] (om/update! cursor :over [ (:row data) (:col data)])
+                              (om/refresh! owner))
+               :onMouseOut (fn [event] (om/update! cursor :over nil)
+                             (om/refresh! owner))
+               :onClick #(handle-square-click data owner cursor) }
+          (when (:piece data) 
+            (dom/img 
+              #js {:src (str "img/" (name (:piece data)) ".svg")
+                   :style #js {:width "49px" :height "49px"} })))))))
 
 (defn row-view [data owner]
   (reify
@@ -595,39 +634,16 @@
   (reify
     om/IRender
     (render [this]
-;      (println data)
       (dom/li nil (str data)))))
 
 (defn handle-move-input-change [e owner {:keys [text]}]
   (om/set-state! owner :move-input (.. e -target -value)))
-
-(defn parse-move [move]
-  (str/split (str move) "-"))
-
-(defn make-move [data owner]
-  (let [move (-> (om/get-node owner "move-input")
-                        .-value
-                        parse-move)]
-    (when move
-;      (println data)
-;      (println move)
-      (let [board (parse-fen (:fen data))
-            legal-moves (set (moves (:position board) (:active-color board)))]
-        (if 
-          (contains? legal-moves move)
-          (let [new-fen (board-to-fen (assoc board :position (move-with-effects (:position board) move) :active-color (switch-color (:active-color board))))]
-            (om/update! data :fen new-fen))
-          (print "Illegal move " move)))
-;        (om/set-state! owner :move-input ""))
-;        (println new-fen))
-    )))
 
 (defn board-view [data owner]
   (reify
     om/IRenderState
     (render-state [this state]
       (let [position-array (position-to-array (:position (parse-fen (:fen data))))]
-	(println (parse-fen (:fen data)))
         (dom/div #js {:className "board" 
                       :style #js {:width "392px"
                                   :height "392px"
