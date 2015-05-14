@@ -401,14 +401,14 @@
     (not (nil? themove))        
     (not (nil? (first themove)))
     (not (nil? (last themove)))
-    (not (in-check? (move position themove) color))
-    ))
+    (not (in-check? (move position themove) color))))
 
 (defn legal-moves
   [position color]
-  (filter 
-    (partial legal-move? position color)
-    (moves position color)))
+  (let [all-moves (moves position color)]
+    (filter 
+      (partial legal-move? position color)
+      all-moves)))
 
 (defn in-checkmate?
   [position color]
@@ -443,62 +443,6 @@
 
 (def start-fen 
   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
-
-(def fen-example 
-  "rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2")
-
-(def fen-checkmate 
-  "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 0 3")
-
-(def fen-stalemate
-  "7k/5K2/6Q1/8/8/8/8/8 b KQkq - 0 1")
-
-(def fen-castle-both
-  "r3k2r/pppqbppp/2npbn2/4p3/4P3/2NPBN2/PPPQBPPP/R3K2R w KQkq - 0 8")
-
-(def fen-white-promote
-  "rnbq1bnr/ppp1kPpp/8/8/4P3/3p4/PPP2PPP/RNBQKBNR w KQ - 0 6")
-
-(def start-position ((parse-fen start-fen) :position))
-
-(def cmpos ((parse-fen fen-checkmate) :position))
-
-(def smpos ((parse-fen fen-stalemate) :position))
-
-(def cbpos ((parse-fen fen-castle-both) :position))
-
-(def wppos ((parse-fen fen-white-promote) :position))
-
-(def current-position cbpos)
-
-(def current-color "white")
-
-(defn play-move 
-  ([] 
-    (def current-position 
-      (move-with-effects current-position 
-            (first (moves current-position current-color))))
-    (def current-color (switch-color current-color))
-    (ppb current-position))
-  ([move-to]
-    (if 
-      (contains? (set (moves current-position current-color)) move-to)
-      (do 
-        (def current-position 
-          (move-with-effects current-position move-to))
-        (def current-color (switch-color current-color))
-        (ppb current-position))
-      (println "illegal move")))
-  ([position move-to]
-    (let [color (piece-color (position (first move-to)))]
-      (if 
-        (contains? (set (moves position color)) move-to)
-        (do 
-          (def current-position 
-            (move-with-effects position move-to))
-          (def current-color (switch-color color))
-          (ppb current-position))
-        (println "illegal move")))))
 
 (defn position-to-array [position]
   (apply vector 
@@ -538,28 +482,26 @@
     " KQkq - 0 1"))
 
 (defonce app-state 
+  (let [board (parse-fen start-fen)]
   (atom {:text "Hello Chestnut!"
 	 :move-input ""
-         :fen start-fen }))
-
-;(defn square-color [parity highlight]
-;  (let [colors (if highlight 
-;                 ["#0000FF", "#0000FF"] 
-;                 ["#B58863" "#F0D9B5"])
-;        row (:row parity)
-;        col (:col parity)]
-;    (get colors (mod (+ row col) 2))))
+	 :message ""
+	 :result nil 
+	 :move-history '()
+         :fen start-fen
+         :legal-moves (set (legal-moves (:position board) (:active-color board)))
+         :position-array (position-to-array (:position board)) })))
 
 (defn square-class [data cursor]
   (let [over (:over cursor) 
         select (:selected cursor) 
         row (:row data)
         col (:col data)
-        selected (and select (= row (first select)) (= col (last select)))
-        highlight (and over (= row (first over)) (= col (last over)))
+        selected (:selected data)
+        hover (:over data)
         classes (cond 
                   selected ["light-square-highlight", "dark-square-highlight"] 
-                  highlight ["light-square-hover", "dark-square-hover"] 
+                  hover ["light-square-hover", "dark-square-hover"] 
                   :else ["light-square", "dark-square"])]
     (get classes (mod (+ row col) 2))))
 
@@ -569,12 +511,21 @@
 (defn make-move [move cursor]
   (when move
     (let [board (parse-fen (:fen cursor))
-          legal-moves (set (moves (:position board) (:active-color board)))]
+          curr-legal-moves (:legal-moves cursor)]
       (if 
-        (contains? legal-moves move)
-        (let [new-fen (board-to-fen (assoc board :position (move-with-effects (:position board) move) :active-color (switch-color (:active-color board))))]
-          (om/update! cursor :fen new-fen))
-        (print "Illegal move " move)))))
+        (contains? curr-legal-moves move)
+        (let [new-board (assoc board :position (move-with-effects (:position board) move) :active-color (switch-color (:active-color board)))
+              new-fen (board-to-fen new-board)]
+          (om/update! cursor :fen new-fen)
+          (om/update! cursor :message "")
+          (om/transact! cursor :move-history (fn [history] (concat history (list (str (first move) "-" (last move))))))
+          (let [new-legal-moves (set (legal-moves (:position new-board) (:active-color new-board))) ]
+            (om/update! cursor :legal-moves new-legal-moves)
+            (when (empty? new-legal-moves) (om/update! cursor :result "Checkmate")))
+          (om/update! cursor :position-array (position-to-array (:position (parse-fen new-fen)))))
+        (do
+          (om/update! cursor :position-array (position-to-array (:position board)))
+          (om/update! cursor :message (str "Illegal move " (first move) "-" (last move))))))))
 
 (defn make-move-button [data owner]
   (let [move (-> (om/get-node owner "move-input")
@@ -587,13 +538,10 @@
         current [(:row data) (:col data)]]
     (if previous
       (do 
-;        (println "moving from " previous " to " current)
-;        (println "moving from " (named-square previous) " to " (named-square current))
         (make-move [(named-square previous) (named-square current)] cursor)
         (om/update! cursor :selected nil))
       (do
-;        (println "setting selected to " current)
-;        (println "setting selected to " (named-square current))
+        (om/update! data :selected true)
         (om/update! cursor :selected current)))
     (om/refresh! owner)))
 
@@ -605,10 +553,10 @@
         (dom/div 
           #js {:className (square-class data cursor) 
                :style #js { :width 49 :height 49 }
-               :onMouseOver (fn [event] (om/update! cursor :over [ (:row data) (:col data)])
-                              (om/refresh! owner))
-               :onMouseOut (fn [event] (om/update! cursor :over nil)
-                             (om/refresh! owner))
+               :onMouseOver (fn [event] 
+                              (om/update! data :over true))
+               :onMouseOut (fn [event] 
+                             (om/update! data :over false))
                :onClick #(handle-square-click data owner cursor) }
           (when (:piece data) 
             (dom/img 
@@ -636,6 +584,12 @@
     (render [this]
       (dom/li nil (str data)))))
 
+(defn move-history-view [data owner]
+  (reify
+    om/IRender
+    (render [this]
+      (dom/li nil (str (first data) " " (last data))))))
+
 (defn handle-move-input-change [e owner {:keys [text]}]
   (om/set-state! owner :move-input (.. e -target -value)))
 
@@ -644,20 +598,21 @@
     om/IRenderState
     (render-state [this state]
       (let [position-array (position-to-array (:position (parse-fen (:fen data))))]
+        (dom/div nil
         (dom/div #js {:className "board" 
                       :style #js {:width "392px"
                                   :height "392px"
                                   :float "left"
                                   :border "2px solid #000000" 
                                   :boxSizing "content-box"}}
-          (apply dom/div nil (om/build-all row-view position-array))
-	  (dom/div nil
-            (dom/input #js {:type "text" :ref "move-input" :value (:move-input state) :onChange #(handle-move-input-change % owner state)})
-	    (dom/button #js {:onClick #(make-move data owner)} "Move"))
-          (dom/div nil (:fen data))
-          (dom/div nil (board-to-fen (parse-fen (:fen data))))
-          (let [parsed-fen (parse-fen (:fen data)) current-moves (map #(str (first %) "-" (last %)) (moves (:position parsed-fen) (:active-color parsed-fen)))]
-            (apply dom/ul nil (om/build-all legal-move-view current-moves))))))))
+          (apply dom/div nil (om/build-all row-view (:position-array data))))
+        (dom/div nil (str (str/capitalize (:active-color (parse-fen (:fen data)))) " to move"))
+        (dom/div nil (:message data))
+        (dom/div nil (:result data))
+        (dom/div nil nil)
+        (dom/div #js { :style #js { :float "left" } } 
+                 (apply dom/ol nil (om/build-all move-history-view (partition 2 2 '("") (:move-history data)))))
+        )))))
 
 (defn main []
   (om/root board-view app-state

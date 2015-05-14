@@ -35,7 +35,7 @@
                                         :pretty-print  true}}}}
 
   :profiles {:dev {:source-paths ["env/dev/clj"]
-                   :test-paths ["test/clj"]
+;                   :test-paths ["test/clj"]
 
                    :dependencies [[figwheel "0.2.1-SNAPSHOT"]
                                   [figwheel-sidecar "0.2.1-SNAPSHOT"]
@@ -54,7 +54,22 @@
                    :env {:is-dev true}
 
                    :cljsbuild {:test-commands { "test" ["phantomjs" "env/test/js/unit-test.js" "env/test/unit-test.html"] }
-                               :builds {:app {:source-paths ["env/dev/cljs"]}
+                               :builds {
+                                        :prod {:source-paths ["src/cljs" "env/prod/cljs"]
+                                               :compiler {:main chess-cljs.main
+                                                          :output-to "target/app.min.js"
+                                                          :output-dir "target"
+                                                          :optimizations :advanced
+                                                          :preamble      ["react/react.min.js"]
+                                                          :pretty-print false}}
+                                        :dev {:source-paths ["src/cljs" "env/dev/cljs"]
+                                              :compiler {:main chess-cljs.main
+                                                         :output-to "target/app.js"
+                                                         :output "target"
+                                                         :optimizations :none
+                                                         :cache-analysis true
+                                                          :preamble      ["react/react.min.js"]
+                                                         :source-map true}}
                                         :test {:source-paths ["src/cljs" "test/cljs"]
                                                :compiler {:output-to     "resources/public/js/app_test.js"
                                                           :output-dir    "resources/public/js/test"
