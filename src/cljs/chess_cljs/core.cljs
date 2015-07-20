@@ -481,6 +481,53 @@
     (print-color (:active-color board))
     " KQkq - 0 1"))
 
+(def piece-score
+  { :k 0 :K 0
+    :q 9 :Q 9
+    :r 5 :R 5
+    :b 3 :B 3
+    :n 3 :N 3
+    :p 1 :P 1 })
+
+(defn material-score [position color]
+  (reduce
+    (fn [s [k v]]
+      (+ s
+         (* (if (= (piece-color k) color) 
+              (piece-score (keyword (str k)))
+              0)
+            v)))
+    0
+    (frequencies (vals position))))
+
+(defn score-position [position color]
+  (if (in-checkmate? position color)
+    Infinity
+    (material-score position color)))
+
+(defn best-score [moves]
+  (reduce 
+    (fn [best curr] 
+      (let [bs (second best)
+            cs (second curr)]
+        (if (< cs bs) 
+          best
+          curr)))
+    moves))
+
+(defn depth-score [position color depth]
+  (if (> depth 0)
+    (best-score 
+      (map (fn [move] 
+             (let [[history score]
+                   (depth-score 
+                     (move-with-effects position move) 
+                     (switch-color color) 
+                     (dec depth))]
+               [(conj history move) (- score)]))
+           (legal-moves position color)))
+    ['() (score-position position color)]))
+
 (defonce app-state 
   (let [board (parse-fen start-fen)]
   (atom {:text "Hello Chestnut!"
